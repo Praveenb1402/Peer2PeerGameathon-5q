@@ -808,16 +808,24 @@ export default function PuzzleAdventureGame() {
     return () => clearInterval(interval);
   }, [gameState.gameStatus]);
 
-  const gridSize = gameState.currentMap.length; // or baseSize
-  const canvasWidth = gridSize * TILE_SIZE;
-  const canvasHeight = gridSize * TILE_SIZE;
+  const [containerSize, setContainerSize] = useState({ width: 800, height: 800 });
 
-  const [difficulty, setDifficulty] = useState('medium');
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      setDifficulty(localStorage.getItem('puzzleDifficulty') || 'medium');
+    function updateSize() {
+      setContainerSize({
+        width: window.innerWidth * 0.9, // 90% of window width
+        height: window.innerHeight * 0.7, // 70% of window height
+      });
     }
+    updateSize();
+    window.addEventListener('resize', updateSize);
+    return () => window.removeEventListener('resize', updateSize);
   }, []);
+
+  const gridSize = gameState.currentMap.length;
+  const TILE_SIZE = Math.floor(Math.min(containerSize.width, containerSize.height) / gridSize);
+  const canvasWidth = TILE_SIZE * gridSize;
+  const canvasHeight = TILE_SIZE * gridSize;
 
   return (
     <div
