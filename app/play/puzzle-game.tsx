@@ -403,6 +403,10 @@ export default function PuzzleAdventureGame() {
           return prev
         }
 
+        // Clear hint highlights after a move
+        setHintTile(null);
+        setReachableTiles([]);
+
         const newState = { ...prev }
         newState.playerPos = { x: newX, y: newY }
         newState.moves += 1
@@ -598,19 +602,7 @@ export default function PuzzleAdventureGame() {
       row.forEach((tile, x) => {
         const pixelX = x * TILE_SIZE
         const pixelY = y * TILE_SIZE
-
-        // Highlight hint tile
-        if (hintTile && hintTile.x === x && hintTile.y === y) {
-          ctx.fillStyle = "rgba(30,144,255,0.5)"; // DodgerBlue overlay
-          ctx.fillRect(pixelX, pixelY, TILE_SIZE, TILE_SIZE);
-        }
-
-        // Highlight reachable tiles
-        if (reachableTiles.some(t => t.x === x && t.y === y)) {
-          ctx.fillStyle = "rgba(0,255,0,0.3)";
-          ctx.fillRect(pixelX, pixelY, TILE_SIZE, TILE_SIZE);
-        }
-
+        // Draw the tile (no highlight overlays here)
         switch (tile) {
           case TILES.WALL:
             ctx.fillStyle = theme.wall
@@ -653,12 +645,25 @@ export default function PuzzleAdventureGame() {
             ctx.fillRect(pixelX, pixelY, TILE_SIZE, TILE_SIZE)
             break
         }
-
         ctx.strokeStyle = "#333"
         ctx.lineWidth = 1
         ctx.strokeRect(pixelX, pixelY, TILE_SIZE, TILE_SIZE)
       })
     })
+    // Draw reachableTiles highlight overlays
+    reachableTiles.forEach(({x, y}) => {
+      const pixelX = x * TILE_SIZE;
+      const pixelY = y * TILE_SIZE;
+      ctx.fillStyle = "rgba(0,255,0,0.3)";
+      ctx.fillRect(pixelX, pixelY, TILE_SIZE, TILE_SIZE);
+    });
+    // Draw hintTile highlight overlay
+    if (hintTile) {
+      const pixelX = hintTile.x * TILE_SIZE;
+      const pixelY = hintTile.y * TILE_SIZE;
+      ctx.fillStyle = "rgba(30,144,255,0.5)"; // DodgerBlue overlay
+      ctx.fillRect(pixelX, pixelY, TILE_SIZE, TILE_SIZE);
+    }
 
     // Render player
     const playerPixelX = gameState.playerPos.x * TILE_SIZE
@@ -788,7 +793,33 @@ export default function PuzzleAdventureGame() {
       }
     }
     if (!found) {
-      toast({ title: "No path to goal!", description: "Cannot provide a hint." });
+      // No path to goal: highlight all adjacent possible moves
+      const possibleMoves: {x: number, y: number}[] = [];
+      for (const dir of directions) {
+        const newX = gameState.playerPos.x + dir.x;
+        const newY = gameState.playerPos.y + dir.y;
+        if (
+          newX >= 0 && newX < size &&
+          newY >= 0 && newY < size
+        ) {
+          const tile = map[newY][newX];
+          if (
+            tile === TILES.EMPTY ||
+            tile === TILES.KEY ||
+            tile === TILES.GOAL ||
+            (tile === TILES.DOOR && gameState.keysCollected > 0)
+          ) {
+            possibleMoves.push({ x: newX, y: newY });
+          }
+        }
+      }
+      if (possibleMoves.length > 0) {
+        setReachableTiles(possibleMoves);
+        setTimeout(() => setReachableTiles([]), 3000);
+        toast({ title: "No path to goal!", description: "Try moving to a highlighted square!" });
+      } else {
+        toast({ title: "No moves available!", description: "You are stuck." });
+      }
       return;
     }
     // Reconstruct path from goal to player
