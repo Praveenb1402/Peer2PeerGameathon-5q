@@ -8,10 +8,68 @@ import { Badge } from "@/components/ui/badge"
 import { Navigation } from "@/components/navigation"
 import { getUserData } from "@/lib/storage"
 import { Play, Trophy, Star, Zap, Target, Sparkles, ArrowRight } from "lucide-react"
+import { Canvas, useFrame, useLoader, useThree } from '@react-three/fiber'
+import { OrbitControls } from '@react-three/drei'
+import { FBXLoader } from 'three-stdlib'
+import { useRef } from 'react'
+import * as THREE from 'three'
+
+const THEMES = {
+  FOREST: { bg: "#2d5016", wall: "#8B4513", empty: "#90EE90" },
+  CAVE: { bg: "#2F2F2F", wall: "#696969", empty: "#D3D3D3" },
+  CYBER: { bg: "#0a0a0a", wall: "#00ffff", empty: "#1a1a2e" },
+  OCEAN: { bg: "#0077be", wall: "#005073", empty: "#a2d5f2" },
+  SUNSET: { bg: "#ff9966", wall: "#ff5e62", empty: "#ffe5b4" },
+  LAVENDER: { bg: "#b57edc", wall: "#7c5295", empty: "#e6e6fa" },
+  DESERT: { bg: "#edc9af", wall: "#c2b280", empty: "#fff8dc" },
+  blue: { bg: "#e0f7fa", wall: "#0288d1", player: "#0066FF" },
+  green: { bg: "#e8f5e9", wall: "#388e3c", player: "#43a047" },
+  purple: { bg: "#f3e5f5", wall: "#8e24aa", player: "#6a1b9a" },
+  // Add more themes!
+}
+
+function FBXCharacterWithAudio({ url, audioUrl }: { url: string, audioUrl: string }) {
+  const group = useRef<THREE.Group>(null)
+  const fbx = useLoader(FBXLoader, url)
+  const mixer = useRef<THREE.AnimationMixer | null>(null)
+  const { camera } = useThree()
+  const soundRef = useRef<THREE.Audio | null>(null)
+
+  useEffect(() => {
+    if (fbx.animations && fbx.animations.length > 0) {
+      mixer.current = new THREE.AnimationMixer(fbx)
+      mixer.current.clipAction(fbx.animations[0]).play()
+    }
+    // Audio setup
+    const listener = new THREE.AudioListener()
+    camera.add(listener)
+    const sound = new THREE.Audio(listener)
+    soundRef.current = sound
+    const audioLoader = new THREE.AudioLoader()
+    audioLoader.load(audioUrl, (buffer) => {
+      sound.setBuffer(buffer)
+      sound.setLoop(false)
+      sound.setVolume(0.5)
+      sound.play()
+    })
+    return () => {
+      if (mixer.current) mixer.current.stopAllAction()
+      camera.remove(listener)
+    }
+  }, [fbx, camera, audioUrl])
+
+  useFrame((_, delta) => {
+    if (mixer.current) mixer.current.update(delta)
+  })
+
+  return <primitive ref={group} object={fbx} scale={0.01} />
+}
 
 export default function HomePage() {
   const [userData, setUserData] = useState(getUserData())
   const [isLoaded, setIsLoaded] = useState(false)
+  const [bgColor, setBgColor] = useState(THEMES.blue.bg) // Default to blue theme
+  const [showDifficulty, setShowDifficulty] = useState(false)
 
   useEffect(() => {
     setUserData(getUserData())
@@ -88,16 +146,25 @@ export default function HomePage() {
 
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
-            <Link href="/play">
-              <Button
-                size="lg"
-                className="text-lg px-8 py-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
-              >
-                <Play className="w-6 h-6 mr-2" />
-                {userData.level > 1 ? "Continue Playing" : "Start Adventure"}
-                <ArrowRight className="w-5 h-5 ml-2" />
-              </Button>
-            </Link>
+            <Button
+              size="lg"
+              className="text-lg px-8 py-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
+              onClick={() => setShowDifficulty(true)}
+            >
+              <Play className="w-6 h-6 mr-2" />
+              {userData.level > 1 ? "Continue Playing" : "Start Adventure"}
+              <ArrowRight className="w-5 h-5 ml-2" />
+            </Button>
+
+            {showDifficulty && (
+              <div className="flex flex-col gap-2 bg-white p-4 rounded shadow-lg mt-4">
+                <span className="font-bold mb-2">Select Difficulty:</span>
+                <Button onClick={() => { localStorage.setItem('puzzleDifficulty', 'easy'); window.location.href = '/play'; }}>Easy</Button>
+                <Button onClick={() => { localStorage.setItem('puzzleDifficulty', 'medium'); window.location.href = '/play'; }}>Medium</Button>
+                <Button onClick={() => { localStorage.setItem('puzzleDifficulty', 'hard'); window.location.href = '/play'; }}>Hard</Button>
+                <Button variant="outline" onClick={() => setShowDifficulty(false)}>Cancel</Button>
+              </div>
+            )}
 
             {userData.level > 1 && (
               <Link href="/achievements">
@@ -200,6 +267,17 @@ export default function HomePage() {
               </CardContent>
             </Card>
           </Link>
+        </div>
+      </main>
+
+      <main style={{ width: '100vw', height: '100vh', margin: 0, padding: 0 }}>
+        <div style={{ background: bgColor, transition: 'background 0.3s' }}>
+          <Canvas>
+            <ambientLight />
+            <pointLight position={[10, 10, 10]} />
+            <FBXCharacterWithAudio url="/Animation_Alert_withSkin.fbx" audioUrl="/sound.mp3" />
+            <OrbitControls />
+          </Canvas>
         </div>
       </main>
     </div>

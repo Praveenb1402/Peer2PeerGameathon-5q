@@ -9,6 +9,7 @@ import { Trophy, Clock, Move, RotateCcw, Star, Key, Home } from "lucide-react"
 import { getUserData, saveUserData } from "@/lib/storage"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
+import clsx from 'clsx'
 
 // Game constants
 const TILE_SIZE = 40
@@ -93,6 +94,18 @@ export default function PuzzleAdventureGame() {
 
   const [showLevelComplete, setShowLevelComplete] = useState(false)
   const [levelMetrics, setLevelMetrics] = useState<LevelMetrics | null>(null)
+  const [shake, setShake] = useState(false)
+  const [dangerBg, setDangerBg] = useState(false)
+
+  const themes = Object.keys(THEMES) as (keyof typeof THEMES)[]
+
+  // Update theme on every level change
+  useEffect(() => {
+    setGameState((prev) => ({
+      ...prev,
+      theme: themes[(prev.level - 1) % themes.length],
+    }))
+  }, [gameState.level])
 
   // Save progress to localStorage
   const saveProgress = useCallback(() => {
@@ -192,7 +205,11 @@ export default function PuzzleAdventureGame() {
       const x = Math.floor(Math.random() * (baseSize - 2)) + 1
       const y = Math.floor(Math.random() * (baseSize - 2)) + 1
 
-      if (map[y][x] === TILES.EMPTY && !(x === startPos.x && y === startPos.y)) {
+      if (
+        map[y][x] === TILES.EMPTY &&
+        !(x === startPos.x && y === startPos.y) &&
+        isPathExists(map, startPos, { x, y }, baseSize)
+      ) {
         map[y][x] = TILES.KEY
         keysPlaced++
       }
@@ -333,6 +350,7 @@ export default function PuzzleAdventureGame() {
             title: "Key Collected!",
             description: "+10 coins earned",
           })
+          playSound('/key.mp3')
         } else if (targetTile === TILES.DOOR && prev.keysCollected > 0) {
           map[newY][newX] = TILES.EMPTY
           newState.keysCollected -= 1
@@ -351,6 +369,13 @@ export default function PuzzleAdventureGame() {
             description: "You've been reset to the start. -25 points",
             variant: "destructive",
           })
+          playSound('/danger.mp3')
+          setShake(true)
+          setDangerBg(true)
+          setTimeout(() => {
+            setShake(false)
+            setDangerBg(false)
+          }, 600)
         } else if (targetTile === TILES.GOAL) {
           newState.gameStatus = "completed"
 
@@ -586,8 +611,65 @@ export default function PuzzleAdventureGame() {
 
   const elapsedTime = Math.floor((Date.now() - gameState.startTime) / 1000)
 
+  function playSound(src: string) {
+    const audio = new window.Audio(src)
+    audio.play()
+  }
+
+  // Move traps (bombs) every 2-3 seconds
+  useEffect(() => {
+    if (gameState.gameStatus !== "playing") return;
+    const interval = setInterval(() => {
+      setGameState((prev) => {
+        const map = prev.currentMap.map((row) => [...row]);
+        const trapPositions: { x: number; y: number }[] = [];
+        // Find all current traps
+        for (let y = 0; y < map.length; y++) {
+          for (let x = 0; x < map[y].length; x++) {
+            if (map[y][x] === TILES.TRAP) {
+              trapPositions.push({ x, y });
+            }
+          }
+        }
+        // Remove all traps
+        trapPositions.forEach(({ x, y }) => {
+          map[y][x] = TILES.EMPTY;
+        });
+        // Place traps at new random empty positions
+        trapPositions.forEach(() => {
+          let placed = false;
+          let attempts = 0;
+          while (!placed && attempts < 50) {
+            const x = Math.floor(Math.random() * map[0].length);
+            const y = Math.floor(Math.random() * map.length);
+            if (
+              map[y][x] === TILES.EMPTY &&
+              !(x === prev.playerPos.x && y === prev.playerPos.y)
+            ) {
+              map[y][x] = TILES.TRAP;
+              placed = true;
+            }
+            attempts++;
+          }
+        });
+        return { ...prev, currentMap: map };
+      });
+    }, 2000 + Math.random() * 1000); // 2-3 seconds
+    return () => clearInterval(interval);
+  }, [gameState.gameStatus]);
+
   return (
-    <div className="flex flex-col items-center gap-4 p-4">
+    <div
+      className={clsx(
+        "flex flex-col items-center gap-4 p-4",
+        shake && "animate-shake",
+      )}
+      style={{
+        background: dangerBg ? '#ff0000' : THEMES[gameState.theme].bg,
+        minHeight: '100vh',
+        transition: 'background 0.5s',
+      }}
+    >
       <div className="text-center">
         <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-200 mb-2">Puzzle Adventure</h1>
         <p className="text-gray-600 dark:text-gray-400">Navigate mazes, collect keys, avoid traps!</p>
