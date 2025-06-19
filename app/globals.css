@@ -105,3 +105,11 @@ body {
 .animate-shake {
   animation: shake 0.6s;
 }
+
+@keyframes rotate90 {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(90deg); }
+}
+.rotate-animation {
+  animation: rotate90 0.7s linear;
+}

@@ -78,11 +78,39 @@ const getDifficulty = () => {
   return 'medium';
 };
 
+// Helper to rotate a 2D array 90 degrees clockwise
+function rotateMatrix(matrix: number[][]): number[][] {
+  const N = matrix.length;
+  const result = Array.from({ length: N }, () => Array(N).fill(0));
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      result[x][N - 1 - y] = matrix[y][x];
+    }
+  }
+  return result;
+}
+
+// Helper to rotate a position 90 degrees clockwise in an NxN grid
+function rotatePos(pos: {x: number, y: number}, N: number): {x: number, y: number} {
+  return { x: N - 1 - pos.y, y: pos.x };
+}
+
+// Helper to get all empty positions
+function getEmptyPositions(map: number[][]): {x: number, y: number}[] {
+  const positions: {x: number, y: number}[] = [];
+  for (let y = 0; y < map.length; y++) {
+    for (let x = 0; x < map.length; x++) {
+      if (map[y][x] === TILES.EMPTY) positions.push({ x, y });
+    }
+  }
+  return positions;
+}
+
 export default function PuzzleAdventureGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const { toast } = useToast()
-  const [userData, setUserData] = useState(getUserData())
-
+  const [isClient, setIsClient] = useState(false);
+  const [userData, setUserData] = useState(getUserData());
   const [gameState, setGameState] = useState<GameState>({
     level: userData.level,
     score: userData.score,
@@ -98,35 +126,24 @@ export default function PuzzleAdventureGame() {
     retries: 0,
     hintsUsed: 0,
     theme: "FOREST",
-  })
+  });
+  const [showLevelComplete, setShowLevelComplete] = useState(false);
+  const [levelMetrics, setLevelMetrics] = useState<LevelMetrics | null>(null);
+  const [shake, setShake] = useState(false);
+  const [dangerBg, setDangerBg] = useState(false);
+  const [reachableTiles, setReachableTiles] = useState<{x: number, y: number}[]>([]);
+  const [isRotating, setIsRotating] = useState(false);
+  const themes = Object.keys(THEMES) as (keyof typeof THEMES)[];
 
-  const [showLevelComplete, setShowLevelComplete] = useState(false)
-  const [levelMetrics, setLevelMetrics] = useState<LevelMetrics | null>(null)
-  const [shake, setShake] = useState(false)
-  const [dangerBg, setDangerBg] = useState(false)
-  const [reachableTiles, setReachableTiles] = useState<{x: number, y: number}[]>([])
-
-  const themes = Object.keys(THEMES) as (keyof typeof THEMES)[]
-
-  // Update theme on every level change
-  useEffect(() => {
-    setGameState((prev) => ({
-      ...prev,
-      theme: themes[(prev.level - 1) % themes.length],
-    }))
-  }, [gameState.level])
-
-  // Save progress to localStorage
   const saveProgress = useCallback(() => {
     saveUserData({
       level: gameState.level,
       score: gameState.score,
       xp: gameState.xp,
       coins: gameState.coins,
-    })
-  }, [gameState])
+    });
+  }, [gameState.level, gameState.score, gameState.xp, gameState.coins]);
 
-  // ML-powered adaptive level generation with proper pathfinding
   const generateAdaptiveLevel = useCallback((metrics: LevelMetrics | null, level: number) => {
     const difficultySetting = getDifficulty();
     let baseSize = 10;
@@ -137,7 +154,7 @@ export default function PuzzleAdventureGame() {
       wallMultiplier = 4;
       trapMultiplier = 0.3;
     } else if (difficultySetting === 'hard') {
-      baseSize = 16;
+      baseSize = 20;
       wallMultiplier = 10;
       trapMultiplier = 1.2;
     } else if (difficultySetting === 'medium') {
@@ -279,8 +296,32 @@ export default function PuzzleAdventureGame() {
       }
     }
 
+    // Ensure the goal is present after all placements
+    let goalFound = false;
+    for (let y = 0; y < baseSize; y++) {
+      for (let x = 0; x < baseSize; x++) {
+        if (map[y][x] === TILES.GOAL) goalFound = true;
+      }
+    }
+    if (!goalFound) {
+      // Place goal on a random non-wall, non-player tile
+      const candidates: {x: number, y: number}[] = [];
+      for (let y = 0; y < baseSize; y++) {
+        for (let x = 0; x < baseSize; x++) {
+          if (map[y][x] !== TILES.WALL && !(x === startPos.x && y === startPos.y)) {
+            candidates.push({ x, y });
+          }
+        }
+      }
+      if (candidates.length > 0) {
+        const idx = Math.floor(Math.random() * candidates.length);
+        const { x, y } = candidates[idx];
+        map[y][x] = TILES.GOAL;
+      }
+    }
+
     return { map, totalKeys: keyCount }
-  }, [])
+  }, [getDifficulty])
 
   // Simple pathfinding to check if goal is reachable
   const isPathExists = (
@@ -424,6 +465,56 @@ export default function PuzzleAdventureGame() {
             title: "Level Complete!",
             description: `+${timeBonus + moveBonus + levelBonus + perfectBonus} points earned!`,
           })
+        }
+
+        if (getDifficulty() === 'hard' && (newState.moves > 0 && newState.moves % 20 === 0)) {
+          setIsRotating(true)
+          setTimeout(() => setIsRotating(false), 700)
+          // Rotate map
+          const N = map.length;
+          const rotatedMap = rotateMatrix(map);
+          // Rotate player position
+          newState.playerPos = rotatePos(newState.playerPos, N);
+          // Move keys and goal to new random empty positions
+          // Remove all keys and goal
+          for (let y = 0; y < N; y++) {
+            for (let x = 0; x < N; x++) {
+              if (rotatedMap[y][x] === TILES.KEY || rotatedMap[y][x] === TILES.GOAL) {
+                rotatedMap[y][x] = TILES.EMPTY;
+              }
+            }
+          }
+          // Place keys
+          let keysToPlace = newState.totalKeys;
+          let empty = getEmptyPositions(rotatedMap);
+          while (keysToPlace > 0 && empty.length > 0) {
+            const idx = Math.floor(Math.random() * empty.length);
+            const { x, y } = empty[idx];
+            rotatedMap[y][x] = TILES.KEY;
+            empty.splice(idx, 1);
+            keysToPlace--;
+          }
+          // Place goal
+          empty = getEmptyPositions(rotatedMap);
+          if (empty.length > 0) {
+            const idx = Math.floor(Math.random() * empty.length);
+            const { x, y } = empty[idx];
+            rotatedMap[y][x] = TILES.GOAL;
+          } else {
+            // If no empty tile, forcibly replace a random non-wall tile with the goal
+            const candidates: {x: number, y: number}[] = [];
+            for (let y = 0; y < N; y++) {
+              for (let x = 0; x < N; x++) {
+                if (rotatedMap[y][x] !== TILES.WALL) candidates.push({ x, y });
+              }
+            }
+            if (candidates.length > 0) {
+              const idx = Math.floor(Math.random() * candidates.length);
+              const { x, y } = candidates[idx];
+              rotatedMap[y][x] = TILES.GOAL;
+            }
+          }
+          newState.currentMap = rotatedMap;
         }
 
         return newState
@@ -717,6 +808,17 @@ export default function PuzzleAdventureGame() {
     return () => clearInterval(interval);
   }, [gameState.gameStatus]);
 
+  const gridSize = gameState.currentMap.length; // or baseSize
+  const canvasWidth = gridSize * TILE_SIZE;
+  const canvasHeight = gridSize * TILE_SIZE;
+
+  const [difficulty, setDifficulty] = useState('medium');
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setDifficulty(localStorage.getItem('puzzleDifficulty') || 'medium');
+    }
+  }, []);
+
   return (
     <div
       className={clsx(
@@ -759,11 +861,11 @@ export default function PuzzleAdventureGame() {
       </div>
 
       {/* Game Canvas */}
-      <div className="relative">
+      <div className={clsx("relative", isRotating && "rotate-animation")}>
         <canvas
           ref={canvasRef}
-          width={GAME_WIDTH}
-          height={GAME_HEIGHT}
+          width={canvasWidth}
+          height={canvasHeight}
           className="border-2 border-gray-300 rounded-lg shadow-lg bg-white"
         />
 

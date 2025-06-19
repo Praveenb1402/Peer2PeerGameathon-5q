@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Navigation } from "@/components/navigation"
 import { getUserData } from "@/lib/storage"
 import { Play, Trophy, Star, Zap, Target, Sparkles, ArrowRight } from "lucide-react"
+import clsx from "clsx"
 
 const THEMES = {
   FOREST: { bg: "#2d5016", wall: "#8B4513", empty: "#90EE90" },
@@ -32,6 +33,7 @@ export default function HomePage() {
   const [isLoaded, setIsLoaded] = useState(false)
   const [bgColor, setBgColor] = useState(THEMES.blue.bg) // Default to blue theme
   const [showDifficulty, setShowDifficulty] = useState(false)
+  const [isRotating, setIsRotating] = useState(false)
 
   useEffect(() => {
     setUserData(getUserData())
@@ -91,8 +93,8 @@ export default function HomePage() {
           {/* Player Stats */}
           {userData.level > 1 && (
             <div className="flex flex-wrap justify-center gap-4 mb-8">
-              <Badge variant="secondary" className="text-lg px-4 py-2">
-                <Trophy className="w-5 h-5 mr-2" />
+              <Badge variant="secondary" className="flex items-center gap-1">
+                <Trophy className="w-4 h-4" />
                 Level {userData.level}
               </Badge>
               <Badge variant="secondary" className="text-lg px-4 py-2">
