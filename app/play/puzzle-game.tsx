@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { Trophy, Clock, Move, RotateCcw, Star, Key, Home } from "lucide-react"
+import { Trophy, Clock, Move, RotateCcw, Star, Key, Home, Lightbulb } from "lucide-react"
 import { getUserData, saveUserData } from "@/lib/storage"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
@@ -134,6 +134,9 @@ export default function PuzzleAdventureGame() {
   const [reachableTiles, setReachableTiles] = useState<{x: number, y: number}[]>([]);
   const [isRotating, setIsRotating] = useState(false);
   const themes = Object.keys(THEMES) as (keyof typeof THEMES)[];
+  const [difficulty, setDifficulty] = useState('medium');
+  const [score, setScore] = useState<number | null>(null);
+  const [hintTile, setHintTile] = useState<{x: number, y: number} | null>(null);
 
   const saveProgress = useCallback(() => {
     saveUserData({
@@ -596,6 +599,12 @@ export default function PuzzleAdventureGame() {
         const pixelX = x * TILE_SIZE
         const pixelY = y * TILE_SIZE
 
+        // Highlight hint tile
+        if (hintTile && hintTile.x === x && hintTile.y === y) {
+          ctx.fillStyle = "rgba(30,144,255,0.5)"; // DodgerBlue overlay
+          ctx.fillRect(pixelX, pixelY, TILE_SIZE, TILE_SIZE);
+        }
+
         // Highlight reachable tiles
         if (reachableTiles.some(t => t.x === x && t.y === y)) {
           ctx.fillStyle = "rgba(0,255,0,0.3)";
@@ -665,7 +674,7 @@ export default function PuzzleAdventureGame() {
     ctx.font = "16px Arial"
     ctx.textAlign = "center"
     ctx.fillText("👤", playerPixelX + TILE_SIZE / 2, playerPixelY + TILE_SIZE / 2 + 5)
-  }, [gameState, reachableTiles])
+  }, [gameState, reachableTiles, hintTile])
 
   // Initialize first level
   useEffect(() => {
@@ -719,44 +728,88 @@ export default function PuzzleAdventureGame() {
 
   const useHint = () => {
     setGameState((prev) => ({ ...prev, hintsUsed: prev.hintsUsed + 1 }))
-    toast({
-      title: "Hint",
-      description: "Look for keys (🗝️) first, then unlock doors (🚪) to reach the goal (🎯)!",
-    })
-    // Compute reachable tiles from player position
+    // Find the goal position
     const map = gameState.currentMap;
     const size = map.length;
+    let goal: {x: number, y: number} | null = null;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        if (map[y][x] === TILES.GOAL) {
+          goal = { x, y };
+          break;
+        }
+      }
+      if (goal) break;
+    }
+    if (!goal) {
+      toast({ title: "No goal found!", description: "Cannot provide a hint." });
+      return;
+    }
+    // BFS to find shortest path
     const visited = Array(size).fill(null).map(() => Array(size).fill(false));
+    const parent: ({x:number,y:number}|null)[][] = Array(size).fill(null).map(() => Array(size).fill(null));
     const queue = [gameState.playerPos];
     visited[gameState.playerPos.y][gameState.playerPos.x] = true;
-    const reachable: {x: number, y: number}[] = [];
     const directions = [
       { x: 0, y: 1 },
       { x: 1, y: 0 },
       { x: 0, y: -1 },
       { x: -1, y: 0 },
     ];
-    while (queue.length > 0) {
+    let found = false;
+    while (queue.length > 0 && !found) {
       const current = queue.shift()!;
-      reachable.push(current);
       for (const dir of directions) {
         const newX = current.x + dir.x;
         const newY = current.y + dir.y;
         if (
           newX >= 0 && newX < size &&
           newY >= 0 && newY < size &&
-          !visited[newY][newX] &&
-          map[newY][newX] !== TILES.WALL &&
-          map[newY][newX] !== TILES.TRAP
+          !visited[newY][newX]
         ) {
-          visited[newY][newX] = true;
-          queue.push({ x: newX, y: newY });
+          const tile = map[newY][newX];
+          // Allow movement if tile is EMPTY, KEY, GOAL, or DOOR (if player has a key)
+          if (
+            tile === TILES.EMPTY ||
+            tile === TILES.KEY ||
+            tile === TILES.GOAL ||
+            (tile === TILES.DOOR && gameState.keysCollected > 0)
+          ) {
+            visited[newY][newX] = true;
+            parent[newY][newX] = current;
+            queue.push({ x: newX, y: newY });
+            if (newX === goal.x && newY === goal.y) {
+              found = true;
+              break;
+            }
+          }
+          // Still block WALL and TRAP
         }
       }
     }
-    setReachableTiles(reachable);
-    setTimeout(() => setReachableTiles([]), 3000);
-  }
+    if (!found) {
+      toast({ title: "No path to goal!", description: "Cannot provide a hint." });
+      return;
+    }
+    // Reconstruct path from goal to player
+    let path = [];
+    let cur = goal;
+    while (cur && (cur.x !== gameState.playerPos.x || cur.y !== gameState.playerPos.y)) {
+      path.push(cur);
+      const next = parent[cur.y][cur.x];
+      if (!next) break;
+      cur = next;
+    }
+    path = path.reverse();
+    // The first step is path[0] (next move)
+    if (path.length > 0) {
+      setHintTile(path[0]);
+      setTimeout(() => setHintTile(null), 3000);
+      toast({ title: "Hint", description: "Try moving to the highlighted square!" });
+    } else {
+      toast({ title: "Already at goal!", description: "You're already at the goal." });
+    }
+  };
 
   const elapsedTime = Math.floor((Date.now() - gameState.startTime) / 1000)
 
@@ -808,161 +861,183 @@ export default function PuzzleAdventureGame() {
     return () => clearInterval(interval);
   }, [gameState.gameStatus]);
 
+  // Responsive grid: dynamically calculate TILE_SIZE based on window size and grid size
   const [containerSize, setContainerSize] = useState({ width: 800, height: 800 });
-
   useEffect(() => {
     function updateSize() {
       setContainerSize({
-        width: window.innerWidth * 0.9, // 90% of window width
-        height: window.innerHeight * 0.7, // 70% of window height
+        width: window.innerWidth * 0.9,
+        height: window.innerHeight * 0.7,
       });
     }
     updateSize();
     window.addEventListener('resize', updateSize);
     return () => window.removeEventListener('resize', updateSize);
   }, []);
-
-  const gridSize = gameState.currentMap.length;
+  const gridSize = gameState.currentMap.length || 10;
   const TILE_SIZE = Math.floor(Math.min(containerSize.width, containerSize.height) / gridSize);
   const canvasWidth = TILE_SIZE * gridSize;
   const canvasHeight = TILE_SIZE * gridSize;
 
+  // Only render the canvas if both are valid
+  if (!gridSize || !TILE_SIZE || isNaN(canvasWidth) || isNaN(canvasHeight)) {
+    return null; // or a loading spinner
+  }
+
+  useEffect(() => {
+    if (gameState.level > 10) {
+      toast({ title: "Level up!" });
+    }
+  }, [gameState.level]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setDifficulty(localStorage.getItem('puzzleDifficulty') || 'medium');
+    }
+  }, []);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  useEffect(() => {
+    // Get score from localStorage or calculate it here
+    setScore(gameState.score);
+  }, [gameState.score]);
+
   return (
-    <div
-      className={clsx(
-        "flex flex-col items-center gap-4 p-4",
-        shake && "animate-shake",
-      )}
-      style={{
-        background: dangerBg ? '#ff0000' : THEMES[gameState.theme].bg,
-        minHeight: '100vh',
-        transition: 'background 0.5s',
-      }}
-    >
-      <div className="text-center">
-        <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-200 mb-2">Puzzle Adventure</h1>
-        <p className="text-gray-600 dark:text-gray-400">Navigate mazes, collect keys, avoid traps!</p>
+    <div className="flex flex-col items-center">
+      <div className="flex justify-center gap-4 mb-4">
+        <Button size="icon" variant="outline" onClick={restartLevel} aria-label="Retry">
+          <RotateCcw className="w-5 h-5" />
+        </Button>
+        <Button size="icon" variant="outline" onClick={useHint} aria-label="Hint">
+          <Lightbulb className="w-5 h-5" />
+        </Button>
       </div>
-
-      {/* Game Stats */}
-      <div className="flex flex-wrap gap-4 justify-center">
-        <Badge variant="secondary" className="flex items-center gap-1">
-          <Trophy className="w-4 h-4" />
-          Level {gameState.level}
-        </Badge>
-        <Badge variant="secondary" className="flex items-center gap-1">
-          <Star className="w-4 h-4" />
-          Score: {gameState.score}
-        </Badge>
-        <Badge variant="secondary" className="flex items-center gap-1">
-          <Key className="w-4 h-4" />
-          Keys: {gameState.keysCollected}/{gameState.totalKeys}
-        </Badge>
-        <Badge variant="secondary" className="flex items-center gap-1">
-          <Clock className="w-4 h-4" />
-          Time: {elapsedTime}s
-        </Badge>
-        <Badge variant="secondary" className="flex items-center gap-1">
-          <Move className="w-4 h-4" />
-          Moves: {gameState.moves}
-        </Badge>
-      </div>
-
-      {/* Game Canvas */}
-      <div className={clsx("relative", isRotating && "rotate-animation")}>
-        <canvas
-          ref={canvasRef}
-          width={canvasWidth}
-          height={canvasHeight}
-          className="border-2 border-gray-300 rounded-lg shadow-lg bg-white"
-        />
-
-        {/* Game Controls Overlay */}
-        <div className="absolute top-2 right-2 flex flex-col gap-1">
-          <Button size="sm" variant="outline" onClick={useHint}>
-            💡 Hint
-          </Button>
-          <Button size="sm" variant="outline" onClick={restartLevel}>
-            <RotateCcw className="w-4 h-4" />
-          </Button>
-          <Link href="/">
-            <Button size="sm" variant="outline">
-              <Home className="w-4 h-4" />
-            </Button>
-          </Link>
-        </div>
-      </div>
-
-      {/* Controls Info */}
-      <div className="text-center text-sm text-gray-600 dark:text-gray-400">
-        <p>Use WASD or Arrow Keys to move • H for Hint • R to Restart</p>
-        <p>Collect keys 🗝️ to unlock doors 🚪 • Avoid traps ⚠️ • Reach the goal 🎯</p>
-      </div>
-
-      {/* Player Progress */}
-      <Card className="w-full max-w-md">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-lg">Player Progress</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div>
-            <div className="flex justify-between text-sm mb-1">
-              <span>XP</span>
-              <span>{gameState.xp}</span>
-            </div>
-            <Progress value={gameState.xp % 100} className="h-2" />
+      <div className="game-box">
+        <div
+          className={clsx(
+            "flex flex-col items-center gap-4 p-4",
+            shake && "animate-shake",
+          )}
+          style={{
+            background: dangerBg ? '#ff0000' : THEMES[gameState.theme].bg,
+            minHeight: '100vh',
+            transition: 'background 0.5s',
+          }}
+        >
+          <div className="text-center">
+            <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-200 mb-2">Puzzle Adventure</h1>
+            <p className="text-gray-600 dark:text-gray-400">Navigate mazes, collect keys, avoid traps!</p>
           </div>
-          <div className="flex justify-between text-sm">
-            <span>Coins: {gameState.coins}</span>
-            <span>Retries: {gameState.retries}</span>
-          </div>
-        </CardContent>
-      </Card>
 
-      {/* Level Complete Modal */}
-      {showLevelComplete && levelMetrics && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <Card className="w-full max-w-md mx-4">
-            <CardHeader className="text-center">
-              <CardTitle className="text-2xl text-green-600">Level Complete!</CardTitle>
+          {/* Game Stats */}
+          <div className="flex flex-wrap gap-4 justify-center">
+            <Badge variant="secondary" className="flex items-center gap-1">
+              <Trophy className="w-4 h-4" />
+              Level {gameState.level}
+            </Badge>
+            <Badge variant="secondary" className="flex items-center gap-1">
+              <Star className="w-4 h-4" />
+              Score: {score !== null ? score : ''}
+            </Badge>
+            <Badge variant="secondary" className="flex items-center gap-1">
+              <Key className="w-4 h-4" />
+              Keys: {gameState.keysCollected}/{gameState.totalKeys}
+            </Badge>
+            <Badge variant="secondary" className="flex items-center gap-1">
+              <Clock className="w-4 h-4" />
+              Time: {elapsedTime}s
+            </Badge>
+            <Badge variant="secondary" className="flex items-center gap-1">
+              <Move className="w-4 h-4" />
+              Moves: {gameState.moves}
+            </Badge>
+          </div>
+
+          {/* Game Canvas */}
+          <div className={clsx("relative", isRotating && "rotate-animation")}>
+            <canvas
+              ref={canvasRef}
+              width={canvasWidth}
+              height={canvasHeight}
+              className="border-2 border-gray-300 rounded-lg shadow-lg bg-white"
+            />
+          </div>
+
+          {/* Controls Info */}
+          <div className="text-center text-sm text-gray-600 dark:text-gray-400">
+            <p>Use WASD or Arrow Keys to move • H for Hint • R to Restart</p>
+            <p>Collect keys 🗝️ to unlock doors 🚪 • Avoid traps ⚠️ • Reach the goal 🎯</p>
+          </div>
+
+          {/* Player Progress */}
+          <Card className="w-full max-w-md">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg">Player Progress</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="text-center">
-                <div className="text-4xl mb-2">🎉</div>
-                <p className="text-lg font-semibold">Level {gameState.level} Completed!</p>
+            <CardContent className="space-y-3">
+              <div>
+                <div className="flex justify-between text-sm mb-1">
+                  <span>XP</span>
+                  <span>{gameState.xp}</span>
+                </div>
+                <Progress value={gameState.xp % 100} className="h-2" />
               </div>
-
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span>Time:</span>
-                  <span>{Math.floor(levelMetrics.timeToComplete / 1000)}s</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Moves:</span>
-                  <span>{levelMetrics.movesUsed}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Retries:</span>
-                  <span>{levelMetrics.retriesUsed}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Hints Used:</span>
-                  <span>{levelMetrics.hintsUsed}</span>
-                </div>
-              </div>
-
-              <div className="flex gap-2">
-                <Button onClick={nextLevel} className="flex-1">
-                  Next Level
-                </Button>
-                <Button onClick={restartLevel} variant="outline">
-                  Replay
-                </Button>
+              <div className="flex justify-between text-sm">
+                <span>Coins: {gameState.coins}</span>
+                <span>Retries: {gameState.retries}</span>
               </div>
             </CardContent>
           </Card>
+
+          {/* Level Complete Modal */}
+          {showLevelComplete && levelMetrics && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <Card className="w-full max-w-md mx-4">
+                <CardHeader className="text-center">
+                  <CardTitle className="text-2xl text-green-600">Level Complete!</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="text-center">
+                    <div className="text-4xl mb-2">🎉</div>
+                    <p className="text-lg font-semibold">Level {gameState.level} Completed!</p>
+                  </div>
+
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span>Time:</span>
+                      <span>{Math.floor(levelMetrics.timeToComplete / 1000)}s</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Moves:</span>
+                      <span>{levelMetrics.movesUsed}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Retries:</span>
+                      <span>{levelMetrics.retriesUsed}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Hints Used:</span>
+                      <span>{levelMetrics.hintsUsed}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button onClick={nextLevel} className="flex-1">
+                      Next Level
+                    </Button>
+                    <Button onClick={restartLevel} variant="outline">
+                      Replay
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   )
 }
