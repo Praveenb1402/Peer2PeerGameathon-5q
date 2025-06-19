@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -8,11 +8,6 @@ import { Badge } from "@/components/ui/badge"
 import { Navigation } from "@/components/navigation"
 import { getUserData } from "@/lib/storage"
 import { Play, Trophy, Star, Zap, Target, Sparkles, ArrowRight } from "lucide-react"
-import { Canvas, useFrame, useLoader, useThree } from '@react-three/fiber'
-import { OrbitControls } from '@react-three/drei'
-import { FBXLoader } from 'three-stdlib'
-import { useRef } from 'react'
-import * as THREE from 'three'
 
 const THEMES = {
   FOREST: { bg: "#2d5016", wall: "#8B4513", empty: "#90EE90" },
@@ -28,42 +23,9 @@ const THEMES = {
   // Add more themes!
 }
 
-function FBXCharacterWithAudio({ url, audioUrl }: { url: string, audioUrl: string }) {
-  const group = useRef<THREE.Group>(null)
-  const fbx = useLoader(FBXLoader, url)
-  const mixer = useRef<THREE.AnimationMixer | null>(null)
-  const { camera } = useThree()
-  const soundRef = useRef<THREE.Audio | null>(null)
-
-  useEffect(() => {
-    if (fbx.animations && fbx.animations.length > 0) {
-      mixer.current = new THREE.AnimationMixer(fbx)
-      mixer.current.clipAction(fbx.animations[0]).play()
-    }
-    // Audio setup
-    const listener = new THREE.AudioListener()
-    camera.add(listener)
-    const sound = new THREE.Audio(listener)
-    soundRef.current = sound
-    const audioLoader = new THREE.AudioLoader()
-    audioLoader.load(audioUrl, (buffer) => {
-      sound.setBuffer(buffer)
-      sound.setLoop(false)
-      sound.setVolume(0.5)
-      sound.play()
-    })
-    return () => {
-      if (mixer.current) mixer.current.stopAllAction()
-      camera.remove(listener)
-    }
-  }, [fbx, camera, audioUrl])
-
-  useFrame((_, delta) => {
-    if (mixer.current) mixer.current.update(delta)
-  })
-
-  return <primitive ref={group} object={fbx} scale={0.01} />
-}
+const useHint = () => {
+  // ...hint logic...
+};
 
 export default function HomePage() {
   const [userData, setUserData] = useState(getUserData())
@@ -267,17 +229,6 @@ export default function HomePage() {
               </CardContent>
             </Card>
           </Link>
-        </div>
-      </main>
-
-      <main style={{ width: '100vw', height: '100vh', margin: 0, padding: 0 }}>
-        <div style={{ background: bgColor, transition: 'background 0.3s' }}>
-          <Canvas>
-            <ambientLight />
-            <pointLight position={[10, 10, 10]} />
-            <FBXCharacterWithAudio url="/Animation_Alert_withSkin.fbx" audioUrl="/sound.mp3" />
-            <OrbitControls />
-          </Canvas>
         </div>
       </main>
     </div>

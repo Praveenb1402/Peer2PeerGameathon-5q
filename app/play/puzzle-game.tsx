@@ -70,6 +70,14 @@ interface LevelMetrics {
   difficultyScore: number
 }
 
+// Get difficulty from localStorage
+const getDifficulty = () => {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('puzzleDifficulty') || 'medium';
+  }
+  return 'medium';
+};
+
 export default function PuzzleAdventureGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const { toast } = useToast()
@@ -96,6 +104,7 @@ export default function PuzzleAdventureGame() {
   const [levelMetrics, setLevelMetrics] = useState<LevelMetrics | null>(null)
   const [shake, setShake] = useState(false)
   const [dangerBg, setDangerBg] = useState(false)
+  const [reachableTiles, setReachableTiles] = useState<{x: number, y: number}[]>([])
 
   const themes = Object.keys(THEMES) as (keyof typeof THEMES)[]
 
@@ -119,18 +128,31 @@ export default function PuzzleAdventureGame() {
 
   // ML-powered adaptive level generation with proper pathfinding
   const generateAdaptiveLevel = useCallback((metrics: LevelMetrics | null, level: number) => {
-    const baseSize = 10
+    const difficultySetting = getDifficulty();
+    let baseSize = 10;
+    let wallMultiplier = 6;
+    let trapMultiplier = 0.5;
+    if (difficultySetting === 'easy') {
+      baseSize = 8;
+      wallMultiplier = 4;
+      trapMultiplier = 0.3;
+    } else if (difficultySetting === 'hard') {
+      baseSize = 16;
+      wallMultiplier = 10;
+      trapMultiplier = 1.2;
+    } else if (difficultySetting === 'medium') {
+      baseSize = 12;
+      wallMultiplier = 7;
+      trapMultiplier = 0.7;
+    }
     let difficulty = Math.min(level * 0.3, 4)
-
     if (metrics) {
       if (metrics.timeToComplete < 30000) difficulty += 0.3
       if (metrics.movesUsed < 25) difficulty += 0.2
       if (metrics.retriesUsed > 2) difficulty -= 0.4
       if (metrics.hintsUsed > 1) difficulty -= 0.3
     }
-
     difficulty = Math.max(0.5, Math.min(difficulty, 4))
-
     const map = Array(baseSize)
       .fill(null)
       .map(() => Array(baseSize).fill(TILES.EMPTY))
@@ -174,7 +196,7 @@ export default function PuzzleAdventureGame() {
     const mainPath = createPath(startPos, goalPos)
 
     // Add walls strategically
-    const wallCount = Math.floor(difficulty * 6)
+    const wallCount = Math.floor(difficulty * wallMultiplier)
     let wallsPlaced = 0
     let attempts = 0
 
@@ -237,7 +259,7 @@ export default function PuzzleAdventureGame() {
     }
 
     // Add traps
-    const trapCount = Math.floor(difficulty * 0.5)
+    const trapCount = Math.floor(difficulty * trapMultiplier * baseSize)
     for (let i = 0; i < trapCount; i++) {
       let attempts = 0
       while (attempts < 20) {
@@ -453,11 +475,7 @@ export default function PuzzleAdventureGame() {
           movePlayer(1, 0)
           break
         case "h":
-          setGameState((prev) => ({ ...prev, hintsUsed: prev.hintsUsed + 1 }))
-          toast({
-            title: "Hint",
-            description: "Look for keys (🗝️) first, then unlock doors (🚪) to reach the goal (🎯)!",
-          })
+          useHint()
           break
         case "r":
           initializeLevel()
@@ -467,7 +485,7 @@ export default function PuzzleAdventureGame() {
 
     window.addEventListener("keydown", handleKeyPress)
     return () => window.removeEventListener("keydown", handleKeyPress)
-  }, [movePlayer, initializeLevel, toast])
+  }, [movePlayer, initializeLevel])
 
   // Render game
   const renderGame = useCallback(() => {
@@ -486,6 +504,12 @@ export default function PuzzleAdventureGame() {
       row.forEach((tile, x) => {
         const pixelX = x * TILE_SIZE
         const pixelY = y * TILE_SIZE
+
+        // Highlight reachable tiles
+        if (reachableTiles.some(t => t.x === x && t.y === y)) {
+          ctx.fillStyle = "rgba(0,255,0,0.3)";
+          ctx.fillRect(pixelX, pixelY, TILE_SIZE, TILE_SIZE);
+        }
 
         switch (tile) {
           case TILES.WALL:
@@ -545,11 +569,12 @@ export default function PuzzleAdventureGame() {
     ctx.arc(playerPixelX + TILE_SIZE / 2, playerPixelY + TILE_SIZE / 2, TILE_SIZE / 3, 0, 2 * Math.PI)
     ctx.fill()
 
+    // Draw the player icon (👤) at the player's current position
     ctx.fillStyle = "#FFF"
     ctx.font = "16px Arial"
     ctx.textAlign = "center"
     ctx.fillText("👤", playerPixelX + TILE_SIZE / 2, playerPixelY + TILE_SIZE / 2 + 5)
-  }, [gameState])
+  }, [gameState, reachableTiles])
 
   // Initialize first level
   useEffect(() => {
@@ -607,6 +632,39 @@ export default function PuzzleAdventureGame() {
       title: "Hint",
       description: "Look for keys (🗝️) first, then unlock doors (🚪) to reach the goal (🎯)!",
     })
+    // Compute reachable tiles from player position
+    const map = gameState.currentMap;
+    const size = map.length;
+    const visited = Array(size).fill(null).map(() => Array(size).fill(false));
+    const queue = [gameState.playerPos];
+    visited[gameState.playerPos.y][gameState.playerPos.x] = true;
+    const reachable: {x: number, y: number}[] = [];
+    const directions = [
+      { x: 0, y: 1 },
+      { x: 1, y: 0 },
+      { x: 0, y: -1 },
+      { x: -1, y: 0 },
+    ];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      reachable.push(current);
+      for (const dir of directions) {
+        const newX = current.x + dir.x;
+        const newY = current.y + dir.y;
+        if (
+          newX >= 0 && newX < size &&
+          newY >= 0 && newY < size &&
+          !visited[newY][newX] &&
+          map[newY][newX] !== TILES.WALL &&
+          map[newY][newX] !== TILES.TRAP
+        ) {
+          visited[newY][newX] = true;
+          queue.push({ x: newX, y: newY });
+        }
+      }
+    }
+    setReachableTiles(reachable);
+    setTimeout(() => setReachableTiles([]), 3000);
   }
 
   const elapsedTime = Math.floor((Date.now() - gameState.startTime) / 1000)
@@ -618,7 +676,8 @@ export default function PuzzleAdventureGame() {
 
   // Move traps (bombs) every 2-3 seconds
   useEffect(() => {
-    if (gameState.gameStatus !== "playing") return;
+    const difficultySetting = getDifficulty();
+    if (gameState.gameStatus !== "playing" || difficultySetting === 'easy') return;
     const interval = setInterval(() => {
       setGameState((prev) => {
         const map = prev.currentMap.map((row) => [...row]);
