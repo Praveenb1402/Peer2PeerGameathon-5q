@@ -5,7 +5,7 @@
   "homepage": "https://praveenb1402.github.io/Peer2PeerGameathon-5q",
  "scripts": {
   "dev": "next dev",
-  "build": "next build && next export",
+  "build": "next build",
   "predeploy": "pnpm build",
   "deploy": "gh-pages -d out"
 },
