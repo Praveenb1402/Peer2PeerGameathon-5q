@@ -8,17 +8,6 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Home, Play, Trophy, Settings, Gift, Plus, Menu, Gamepad2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-// Function to get the correct base path for GitHub Pages
-const getBasePath = () => {
-  if (typeof window !== 'undefined') {
-    // Check if we're on GitHub Pages
-    if (window.location.hostname === 'praveenb1402.github.io') {
-      return '/Peer2PeerGameathon-5q'
-    }
-  }
-  return ''
-}
-
 const navigation = [
   { name: "Home", href: "/", icon: Home },
   { name: "Play", href: "/play", icon: Play },
@@ -31,19 +20,17 @@ const navigation = [
 export function Navigation() {
   const [isOpen, setIsOpen] = useState(false)
   const pathname = usePathname()
-  const basePath = getBasePath()
 
   const NavItems = ({ mobile = false }: { mobile?: boolean }) => (
     <>
       {navigation.map((item) => {
         const Icon = item.icon
         const isActive = pathname === item.href
-        const href = item.href === '/' ? basePath + '/' : basePath + item.href
 
         return (
           <Link
             key={item.name}
-            href={href}
+            href={item.href}
             onClick={() => mobile && setIsOpen(false)}
             className={cn(
               "flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 hover:scale-105",
@@ -65,7 +52,7 @@ export function Navigation() {
     <>
       {/* Desktop Navigation */}
       <nav className="hidden md:flex items-center justify-between p-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b sticky top-0 z-50">
-        <Link href={basePath + "/"} className="flex items-center gap-2 font-bold text-xl">
+        <Link href="/" className="flex items-center gap-2 font-bold text-xl">
           <Gamepad2 className="w-8 h-8 text-primary" />
           Puzzle Adventure
         </Link>
@@ -77,7 +64,7 @@ export function Navigation() {
 
       {/* Mobile Navigation */}
       <nav className="md:hidden flex items-center justify-between p-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b sticky top-0 z-50">
-        <Link href={basePath + "/"} className="flex items-center gap-2 font-bold text-lg">
+        <Link href="/" className="flex items-center gap-2 font-bold text-lg">
           <Gamepad2 className="w-6 h-6 text-primary" />
           Puzzle Adventure
         </Link>

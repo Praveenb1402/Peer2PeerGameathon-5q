@@ -12,8 +12,8 @@ const nextConfig = {
   // GitHub Pages configuration
   basePath: process.env.NODE_ENV === 'production' ? '/Peer2PeerGameathon-5q' : '',
   assetPrefix: process.env.NODE_ENV === 'production' ? '/Peer2PeerGameathon-5q/' : '',
-  trailingSlash: true,
   output: 'export',
+  trailingSlash: false,
 }
 
 export default nextConfig

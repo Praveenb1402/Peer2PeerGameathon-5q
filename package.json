@@ -2,12 +2,13 @@
   "name": "my-v0-project",
   "version": "0.1.0",
   "private": true,
-"scripts": {
-  "dev": "your dev command",
-  "build": "next build",
-  "predeploy": "pnpm build",
-  "deploy": "gh-pages -d dist"
-},
+  "homepage": "https://praveenb1402.github.io/Peer2PeerGameathon-5q",
+  "scripts": {
+    "dev": "your dev command",
+    "build": "next build",
+    "predeploy": "pnpm build",
+    "deploy": "gh-pages -d dist"
+  },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
     "@radix-ui/react-accordion": "1.2.2",
