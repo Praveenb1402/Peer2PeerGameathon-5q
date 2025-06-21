@@ -1,7 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import Link from "next/link"
+import { useState } from "react"
 import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
@@ -9,50 +8,29 @@ import { Home, Play, Trophy, Settings, Gift, Plus, Menu, Gamepad2 } from "lucide
 import { cn } from "@/lib/utils"
 
 const navigation = [
-  { name: "Home", href: "/", icon: Home },
-  { name: "Play", href: "/play", icon: Play },
-  { name: "Add Content", href: "/add-content", icon: Plus },
-  { name: "Achievements", href: "/achievements", icon: Trophy },
-  { name: "Rewards", href: "/rewards", icon: Gift },
-  { name: "Settings", href: "/settings", icon: Settings },
+  { name: "Home", href: "https://praveenb1402.github.io/Peer2PeerGameathon-5q/", icon: Home },
+  { name: "Play", href: "https://praveenb1402.github.io/Peer2PeerGameathon-5q/play", icon: Play },
+  { name: "Add Content", href: "https://praveenb1402.github.io/Peer2PeerGameathon-5q/add-content", icon: Plus },
+  { name: "Achievements", href: "https://praveenb1402.github.io/Peer2PeerGameathon-5q/achievements", icon: Trophy },
+  { name: "Rewards", href: "https://praveenb1402.github.io/Peer2PeerGameathon-5q/rewards", icon: Gift },
+  { name: "Settings", href: "https://praveenb1402.github.io/Peer2PeerGameathon-5q/settings", icon: Settings },
 ]
 
 export function Navigation() {
   const [isOpen, setIsOpen] = useState(false)
-  const [isGitHubPages, setIsGitHubPages] = useState(false)
   const pathname = usePathname()
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      setIsGitHubPages(window.location.hostname === 'praveenb1402.github.io')
-    }
-  }, [])
-
-  const handleNavigation = (href: string) => {
-    if (isGitHubPages) {
-      const fullUrl = href === '/' 
-        ? 'https://praveenb1402.github.io/Peer2PeerGameathon-5q/'
-        : `https://praveenb1402.github.io/Peer2PeerGameathon-5q${href}`
-      window.location.href = fullUrl
-    } else {
-      // For local development, use Next.js routing
-      window.location.href = href
-    }
-  }
 
   const NavItems = ({ mobile = false }: { mobile?: boolean }) => (
     <>
       {navigation.map((item) => {
         const Icon = item.icon
-        const isActive = pathname === item.href
+        const isActive = pathname === item.href.replace('https://praveenb1402.github.io/Peer2PeerGameathon-5q', '')
 
         return (
-          <button
+          <a
             key={item.name}
-            onClick={() => {
-              handleNavigation(item.href)
-              if (mobile) setIsOpen(false)
-            }}
+            href={item.href}
+            onClick={() => mobile && setIsOpen(false)}
             className={cn(
               "flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 hover:scale-105",
               isActive
@@ -63,7 +41,7 @@ export function Navigation() {
           >
             <Icon className="w-5 h-5" />
             {item.name}
-          </button>
+          </a>
         )
       })}
     </>
@@ -73,13 +51,13 @@ export function Navigation() {
     <>
       {/* Desktop Navigation */}
       <nav className="hidden md:flex items-center justify-between p-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b sticky top-0 z-50">
-        <button 
-          onClick={() => handleNavigation("/")}
+        <a 
+          href="https://praveenb1402.github.io/Peer2PeerGameathon-5q/"
           className="flex items-center gap-2 font-bold text-xl hover:opacity-80"
         >
           <Gamepad2 className="w-8 h-8 text-primary" />
           Puzzle Adventure
-        </button>
+        </a>
 
         <div className="flex items-center gap-2">
           <NavItems />
@@ -88,13 +66,13 @@ export function Navigation() {
 
       {/* Mobile Navigation */}
       <nav className="md:hidden flex items-center justify-between p-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b sticky top-0 z-50">
-        <button 
-          onClick={() => handleNavigation("/")}
+        <a 
+          href="https://praveenb1402.github.io/Peer2PeerGameathon-5q/"
           className="flex items-center gap-2 font-bold text-lg hover:opacity-80"
         >
           <Gamepad2 className="w-6 h-6 text-primary" />
           Puzzle Adventure
-        </button>
+        </a>
 
         <Sheet open={isOpen} onOpenChange={setIsOpen}>
           <SheetTrigger asChild>
