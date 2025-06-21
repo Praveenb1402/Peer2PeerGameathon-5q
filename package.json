@@ -4,7 +4,7 @@
   "private": true,
 "scripts": {
   "dev": "your dev command",
-  "build": "your build command (e.g., vite build / react build)",
+  "build": "next build",
   "predeploy": "pnpm build",
   "deploy": "gh-pages -d dist"
 },
