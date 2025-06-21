@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -19,18 +19,33 @@ const navigation = [
 
 export function Navigation() {
   const [isOpen, setIsOpen] = useState(false)
+  const [isGitHubPages, setIsGitHubPages] = useState(false)
   const pathname = usePathname()
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setIsGitHubPages(window.location.hostname === 'praveenb1402.github.io')
+    }
+  }, [])
+
+  const getHref = (href: string) => {
+    if (isGitHubPages) {
+      return href === '/' ? '/Peer2PeerGameathon-5q/' : `/Peer2PeerGameathon-5q${href}`
+    }
+    return href
+  }
 
   const NavItems = ({ mobile = false }: { mobile?: boolean }) => (
     <>
       {navigation.map((item) => {
         const Icon = item.icon
         const isActive = pathname === item.href
+        const href = getHref(item.href)
 
         return (
           <Link
             key={item.name}
-            href={item.href}
+            href={href}
             onClick={() => mobile && setIsOpen(false)}
             className={cn(
               "flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 hover:scale-105",
@@ -52,7 +67,7 @@ export function Navigation() {
     <>
       {/* Desktop Navigation */}
       <nav className="hidden md:flex items-center justify-between p-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b sticky top-0 z-50">
-        <Link href="/" className="flex items-center gap-2 font-bold text-xl">
+        <Link href={getHref("/")} className="flex items-center gap-2 font-bold text-xl">
           <Gamepad2 className="w-8 h-8 text-primary" />
           Puzzle Adventure
         </Link>
@@ -64,7 +79,7 @@ export function Navigation() {
 
       {/* Mobile Navigation */}
       <nav className="md:hidden flex items-center justify-between p-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b sticky top-0 z-50">
-        <Link href="/" className="flex items-center gap-2 font-bold text-lg">
+        <Link href={getHref("/")} className="flex items-center gap-2 font-bold text-lg">
           <Gamepad2 className="w-6 h-6 text-primary" />
           Puzzle Adventure
         </Link>
