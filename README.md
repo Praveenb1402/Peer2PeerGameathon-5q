@@ -52,6 +52,4 @@ Lucide React (icons)
 clsx (utility)
 Three.js (optional, for 3D)
 
-Your project is live at:
-https://praveenb1402.github.io/Peer2PeerGameathon-5q/
 
