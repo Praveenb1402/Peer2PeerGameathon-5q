@@ -52,4 +52,6 @@ Lucide React (icons)
 clsx (utility)
 Three.js (optional, for 3D)
 
+Project is live on:
+https://v0-2d-puzzle-game-design-git-main-praveenb1402-2127s-projects.vercel.app/
 
