@@ -71,12 +71,14 @@ export default function RewardsPage() {
     setUserData(data)
 
     // Check daily streak
-    const today = new Date().toDateString()
-    const lastClaim = localStorage.getItem("lastDailyReward")
-    const streak = Number.parseInt(localStorage.getItem("dailyStreak") || "0")
+    if (typeof window !== 'undefined') {
+      const today = new Date().toDateString()
+      const lastClaim = localStorage.getItem("lastDailyReward")
+      const streak = Number.parseInt(localStorage.getItem("dailyStreak") || "0")
 
-    setLastClaimDate(lastClaim)
-    setDailyStreak(streak)
+      setLastClaimDate(lastClaim)
+      setDailyStreak(streak)
+    }
   }, [])
 
   const canClaimDaily = () => {
@@ -117,8 +119,10 @@ export default function RewardsPage() {
     saveUserData(updatedData)
 
     // Update streak tracking
-    localStorage.setItem("lastDailyReward", today)
-    localStorage.setItem("dailyStreak", newStreak.toString())
+    if (typeof window !== 'undefined') {
+      localStorage.setItem("lastDailyReward", today)
+      localStorage.setItem("dailyStreak", newStreak.toString())
+    }
     setLastClaimDate(today)
     setDailyStreak(newStreak)
 
@@ -142,9 +146,11 @@ export default function RewardsPage() {
     }
 
     // Mark reward as claimed
-    const claimedRewards = JSON.parse(localStorage.getItem("claimedMilestones") || "[]")
-    claimedRewards.push(rewardId)
-    localStorage.setItem("claimedMilestones", JSON.stringify(claimedRewards))
+    if (typeof window !== 'undefined') {
+      const claimedRewards = JSON.parse(localStorage.getItem("claimedMilestones") || "[]")
+      claimedRewards.push(rewardId)
+      localStorage.setItem("claimedMilestones", JSON.stringify(claimedRewards))
+    }
 
     setUserData(updatedData)
     saveUserData(updatedData)
@@ -156,6 +162,8 @@ export default function RewardsPage() {
   }
 
   const isRewardAvailable = (reward: any) => {
+    if (typeof window === 'undefined') return false
+    
     const claimedRewards = JSON.parse(localStorage.getItem("claimedMilestones") || "[]")
     if (claimedRewards.includes(reward.id)) return false
 
@@ -169,6 +177,8 @@ export default function RewardsPage() {
   }
 
   const isRewardClaimed = (rewardId: string) => {
+    if (typeof window === 'undefined') return false
+    
     const claimedRewards = JSON.parse(localStorage.getItem("claimedMilestones") || "[]")
     return claimedRewards.includes(rewardId)
   }
