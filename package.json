@@ -2,7 +2,7 @@
   "name": "peer2peergameathon",
   "version": "0.1.0",
   "private": true,
-  "homepage": "https://praveenb1402.github.io/Peer2PeerGameathon-5q",
+  "homepage": "https://v0-2d-puzzle-game-design-git-main-praveenb1402-2127s-projects.vercel.app/",
  "scripts": {
   "dev": "next dev",
   "build": "next build",

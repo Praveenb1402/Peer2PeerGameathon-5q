@@ -2,18 +2,19 @@
 
 import { useState } from "react"
 import { usePathname } from "next/navigation"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Home, Play, Trophy, Settings, Gift, Plus, Menu, Gamepad2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const navigation = [
-  { name: "Home", href: "https://praveenb1402.github.io/Peer2PeerGameathon-5q/", icon: Home },
-  { name: "Play", href: "https://praveenb1402.github.io/Peer2PeerGameathon-5q/play", icon: Play },
-  { name: "Add Content", href: "https://praveenb1402.github.io/Peer2PeerGameathon-5q/add-content", icon: Plus },
-  { name: "Achievements", href: "https://praveenb1402.github.io/Peer2PeerGameathon-5q/achievements", icon: Trophy },
-  { name: "Rewards", href: "https://praveenb1402.github.io/Peer2PeerGameathon-5q/rewards", icon: Gift },
-  { name: "Settings", href: "https://praveenb1402.github.io/Peer2PeerGameathon-5q/settings", icon: Settings },
+  { name: "Home", href: "/", icon: Home },
+  { name: "Play", href: "/play", icon: Play },
+  { name: "Add Content", href: "/add-content", icon: Plus },
+  { name: "Achievements", href: "/achievements", icon: Trophy },
+  { name: "Rewards", href: "/rewards", icon: Gift },
+  { name: "Settings", href: "/settings", icon: Settings },
 ]
 
 export function Navigation() {
@@ -24,10 +25,10 @@ export function Navigation() {
     <>
       {navigation.map((item) => {
         const Icon = item.icon
-        const isActive = pathname === item.href.replace('https://praveenb1402.github.io/Peer2PeerGameathon-5q', '')
+        const isActive = pathname === item.href
 
         return (
-          <a
+          <Link
             key={item.name}
             href={item.href}
             onClick={() => mobile && setIsOpen(false)}
@@ -41,7 +42,7 @@ export function Navigation() {
           >
             <Icon className="w-5 h-5" />
             {item.name}
-          </a>
+          </Link>
         )
       })}
     </>
@@ -51,13 +52,13 @@ export function Navigation() {
     <>
       {/* Desktop Navigation */}
       <nav className="hidden md:flex items-center justify-between p-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b sticky top-0 z-50">
-        <a 
-          href="https://praveenb1402.github.io/Peer2PeerGameathon-5q/"
+        <Link 
+          href="/"
           className="flex items-center gap-2 font-bold text-xl hover:opacity-80"
         >
           <Gamepad2 className="w-8 h-8 text-primary" />
           Puzzle Adventure
-        </a>
+        </Link>
 
         <div className="flex items-center gap-2">
           <NavItems />
@@ -66,13 +67,13 @@ export function Navigation() {
 
       {/* Mobile Navigation */}
       <nav className="md:hidden flex items-center justify-between p-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b sticky top-0 z-50">
-        <a 
-          href="https://praveenb1402.github.io/Peer2PeerGameathon-5q/"
+        <Link 
+          href="/"
           className="flex items-center gap-2 font-bold text-lg hover:opacity-80"
         >
           <Gamepad2 className="w-6 h-6 text-primary" />
           Puzzle Adventure
-        </a>
+        </Link>
 
         <Sheet open={isOpen} onOpenChange={setIsOpen}>
           <SheetTrigger asChild>
@@ -89,4 +90,4 @@ export function Navigation() {
       </nav>
     </>
   )
-}
+} 

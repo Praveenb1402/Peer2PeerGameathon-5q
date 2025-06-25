@@ -110,18 +110,23 @@ export default function PuzzleAdventureGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const { toast } = useToast()
   const [isClient, setIsClient] = useState(false);
-  const [userData, setUserData] = useState(getUserData());
+  const [userData, setUserData] = useState({
+    level: 1,
+    score: 0,
+    xp: 0,
+    coins: 0,
+  });
   const [gameState, setGameState] = useState<GameState>({
-    level: userData.level,
-    score: userData.score,
-    xp: userData.xp,
-    coins: userData.coins,
+    level: 1,
+    score: 0,
+    xp: 0,
+    coins: 0,
     currentMap: [],
     playerPos: { x: 1, y: 1 },
     keysCollected: 0,
     totalKeys: 0,
     gameStatus: "playing",
-    startTime: Date.now(),
+    startTime: 0,
     moves: 0,
     retries: 0,
     hintsUsed: 0,
@@ -137,6 +142,107 @@ export default function PuzzleAdventureGame() {
   const [difficulty, setDifficulty] = useState('medium');
   const [score, setScore] = useState<number | null>(null);
   const [hintTile, setHintTile] = useState<{x: number, y: number} | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Detect mobile device
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768 || 'ontouchstart' in window);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Load user data on client side to prevent hydration mismatch
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedUserData = getUserData();
+      setUserData(savedUserData);
+      setGameState(prev => ({
+        ...prev,
+        level: savedUserData.level,
+        score: savedUserData.score,
+        xp: savedUserData.xp,
+        coins: savedUserData.coins,
+        startTime: Date.now(),
+      }));
+      
+      // Load difficulty setting
+      const savedDifficulty = localStorage.getItem('puzzleDifficulty') || 'medium';
+      setDifficulty(savedDifficulty);
+    }
+  }, []);
+
+  // Touch controls for mobile
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (!canvasRef.current || gameState.gameStatus !== "playing") return;
+    
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const touch = e.touches[0];
+    const x = touch.clientX - rect.left;
+    const y = touch.clientY - rect.top;
+    
+    // Convert touch position to grid coordinates
+    const gridSize = gameState.currentMap.length;
+    const tileSize = Math.min(rect.width, rect.height) / gridSize;
+    const gridX = Math.floor(x / tileSize);
+    const gridY = Math.floor(y / tileSize);
+    
+    // Check if touch is on a valid adjacent tile
+    const playerX = gameState.playerPos.x;
+    const playerY = gameState.playerPos.y;
+    
+    if (gridX === playerX && gridY === playerY - 1) {
+      movePlayer(0, -1); // Up
+    } else if (gridX === playerX && gridY === playerY + 1) {
+      movePlayer(0, 1); // Down
+    } else if (gridX === playerX - 1 && gridY === playerY) {
+      movePlayer(-1, 0); // Left
+    } else if (gridX === playerX + 1 && gridY === playerY) {
+      movePlayer(1, 0); // Right
+    }
+  }, [gameState.playerPos, gameState.currentMap.length, gameState.gameStatus]);
+
+  // Swipe controls for mobile
+  const [touchStart, setTouchStart] = useState<{x: number, y: number} | null>(null);
+  
+  const handleTouchStartSwipe = useCallback((e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    setTouchStart({ x: touch.clientX, y: touch.clientY });
+  }, []);
+
+  const handleTouchEndSwipe = useCallback((e: React.TouchEvent) => {
+    if (!touchStart || gameState.gameStatus !== "playing") return;
+    
+    const touch = e.changedTouches[0];
+    const deltaX = touch.clientX - touchStart.x;
+    const deltaY = touch.clientY - touchStart.y;
+    const minSwipeDistance = 30;
+    
+    if (Math.abs(deltaX) > Math.abs(deltaY)) {
+      // Horizontal swipe
+      if (Math.abs(deltaX) > minSwipeDistance) {
+        if (deltaX > 0) {
+          movePlayer(1, 0); // Right
+        } else {
+          movePlayer(-1, 0); // Left
+        }
+      }
+    } else {
+      // Vertical swipe
+      if (Math.abs(deltaY) > minSwipeDistance) {
+        if (deltaY > 0) {
+          movePlayer(0, 1); // Down
+        } else {
+          movePlayer(0, -1); // Up
+        }
+      }
+    }
+    
+    setTouchStart(null);
+  }, [touchStart, gameState.gameStatus]);
 
   const saveProgress = useCallback(() => {
     saveUserData({
@@ -585,111 +691,10 @@ export default function PuzzleAdventureGame() {
     return () => window.removeEventListener("keydown", handleKeyPress)
   }, [movePlayer, initializeLevel])
 
-  // Render game
-  const renderGame = useCallback(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-
-    const ctx = canvas.getContext("2d")
-    if (!ctx) return
-
-    const theme = THEMES[gameState.theme]
-
-    ctx.fillStyle = theme.bg
-    ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT)
-
-    gameState.currentMap.forEach((row, y) => {
-      row.forEach((tile, x) => {
-        const pixelX = x * TILE_SIZE
-        const pixelY = y * TILE_SIZE
-        // Draw the tile (no highlight overlays here)
-        switch (tile) {
-          case TILES.WALL:
-            ctx.fillStyle = theme.wall
-            ctx.fillRect(pixelX, pixelY, TILE_SIZE, TILE_SIZE)
-            break
-          case TILES.KEY:
-            ctx.fillStyle = "#FFD700"
-            ctx.fillRect(pixelX + 8, pixelY + 8, TILE_SIZE - 16, TILE_SIZE - 16)
-            ctx.fillStyle = "#000"
-            ctx.font = "20px Arial"
-            ctx.textAlign = "center"
-            ctx.fillText("🗝️", pixelX + TILE_SIZE / 2, pixelY + TILE_SIZE / 2 + 7)
-            break
-          case TILES.DOOR:
-            ctx.fillStyle = "#8B4513"
-            ctx.fillRect(pixelX, pixelY, TILE_SIZE, TILE_SIZE)
-            ctx.fillStyle = "#000"
-            ctx.font = "20px Arial"
-            ctx.textAlign = "center"
-            ctx.fillText("🚪", pixelX + TILE_SIZE / 2, pixelY + TILE_SIZE / 2 + 7)
-            break
-          case TILES.GOAL:
-            ctx.fillStyle = "#00FF00"
-            ctx.fillRect(pixelX, pixelY, TILE_SIZE, TILE_SIZE)
-            ctx.fillStyle = "#000"
-            ctx.font = "20px Arial"
-            ctx.textAlign = "center"
-            ctx.fillText("🎯", pixelX + TILE_SIZE / 2, pixelY + TILE_SIZE / 2 + 7)
-            break
-          case TILES.TRAP:
-            ctx.fillStyle = "#FF0000"
-            ctx.fillRect(pixelX + 4, pixelY + 4, TILE_SIZE - 8, TILE_SIZE - 8)
-            ctx.fillStyle = "#000"
-            ctx.font = "16px Arial"
-            ctx.textAlign = "center"
-            ctx.fillText("⚠️", pixelX + TILE_SIZE / 2, pixelY + TILE_SIZE / 2 + 5)
-            break
-          default:
-            ctx.fillStyle = theme.empty
-            ctx.fillRect(pixelX, pixelY, TILE_SIZE, TILE_SIZE)
-            break
-        }
-        ctx.strokeStyle = "#333"
-        ctx.lineWidth = 1
-        ctx.strokeRect(pixelX, pixelY, TILE_SIZE, TILE_SIZE)
-      })
-    })
-    // Draw reachableTiles highlight overlays
-    reachableTiles.forEach(({x, y}) => {
-      const pixelX = x * TILE_SIZE;
-      const pixelY = y * TILE_SIZE;
-      ctx.fillStyle = "rgba(0,255,0,0.3)";
-      ctx.fillRect(pixelX, pixelY, TILE_SIZE, TILE_SIZE);
-    });
-    // Draw hintTile highlight overlay
-    if (hintTile) {
-      const pixelX = hintTile.x * TILE_SIZE;
-      const pixelY = hintTile.y * TILE_SIZE;
-      ctx.fillStyle = "rgba(30,144,255,0.5)"; // DodgerBlue overlay
-      ctx.fillRect(pixelX, pixelY, TILE_SIZE, TILE_SIZE);
-    }
-
-    // Render player
-    const playerPixelX = gameState.playerPos.x * TILE_SIZE
-    const playerPixelY = gameState.playerPos.y * TILE_SIZE
-
-    ctx.fillStyle = "#0066FF"
-    ctx.beginPath()
-    ctx.arc(playerPixelX + TILE_SIZE / 2, playerPixelY + TILE_SIZE / 2, TILE_SIZE / 3, 0, 2 * Math.PI)
-    ctx.fill()
-
-    // Draw the player icon (👤) at the player's current position
-    ctx.fillStyle = "#FFF"
-    ctx.font = "16px Arial"
-    ctx.textAlign = "center"
-    ctx.fillText("👤", playerPixelX + TILE_SIZE / 2, playerPixelY + TILE_SIZE / 2 + 5)
-  }, [gameState, reachableTiles, hintTile])
-
   // Initialize first level
   useEffect(() => {
     initializeLevel()
   }, [])
-
-  // Render game loop
-  useEffect(() => {
-    renderGame()
-  }, [renderGame])
 
   // Save progress when game state changes
   useEffect(() => {
@@ -845,8 +850,16 @@ export default function PuzzleAdventureGame() {
   const elapsedTime = Math.floor((Date.now() - gameState.startTime) / 1000)
 
   function playSound(src: string) {
-    const audio = new window.Audio(src)
-    audio.play()
+    try {
+      if (typeof window !== 'undefined' && window.Audio) {
+        const audio = new window.Audio(src);
+        audio.play().catch((error) => {
+          console.warn('Audio playback failed:', error);
+        });
+      }
+    } catch (error) {
+      console.warn('Audio creation failed:', error);
+    }
   }
 
   // Move traps (bombs) every 2-3 seconds
@@ -893,39 +906,41 @@ export default function PuzzleAdventureGame() {
   }, [gameState.gameStatus]);
 
   // Responsive grid: dynamically calculate TILE_SIZE based on window size and grid size
-  const [containerSize, setContainerSize] = useState({ width: 800, height: 800 });
+  const [containerSize, setContainerSize] = useState<{ width: number; height: number } | null>(null);
   useEffect(() => {
     function updateSize() {
-      setContainerSize({
-        width: window.innerWidth * 0.9,
-        height: window.innerHeight * 0.7,
-      });
+      if (isMobile) {
+        setContainerSize({
+          width: Math.min(window.innerWidth * 0.95, 400),
+          height: Math.min(window.innerHeight * 0.5, 400),
+        });
+      } else {
+        setContainerSize({
+          width: window.innerWidth * 0.9,
+          height: window.innerHeight * 0.7,
+        });
+      }
     }
     updateSize();
     window.addEventListener('resize', updateSize);
     return () => window.removeEventListener('resize', updateSize);
-  }, []);
+  }, [isMobile]);
+  
   const gridSize = gameState.currentMap.length || 10;
-  const TILE_SIZE = Math.floor(Math.min(containerSize.width, containerSize.height) / gridSize);
+  const TILE_SIZE = containerSize ? Math.floor(Math.min(containerSize.width, containerSize.height) / gridSize) : 0;
   const canvasWidth = TILE_SIZE * gridSize;
   const canvasHeight = TILE_SIZE * gridSize;
 
-  // Only render the canvas if both are valid
-  if (!gridSize || !TILE_SIZE || isNaN(canvasWidth) || isNaN(canvasHeight)) {
-    return null; // or a loading spinner
-  }
+  const isLoading = !isClient || !containerSize || !gridSize || !TILE_SIZE || isNaN(canvasWidth) || isNaN(canvasHeight);
 
   useEffect(() => {
     if (gameState.level > 10) {
-      toast({ title: "Level up!" });
+      // Use setTimeout to avoid setState during render
+      setTimeout(() => {
+        toast({ title: "Level up!" });
+      }, 0);
     }
-  }, [gameState.level]);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      setDifficulty(localStorage.getItem('puzzleDifficulty') || 'medium');
-    }
-  }, []);
+  }, [gameState.level, toast]);
 
   useEffect(() => {
     setIsClient(true);
@@ -936,139 +951,305 @@ export default function PuzzleAdventureGame() {
     setScore(gameState.score);
   }, [gameState.score]);
 
+  const renderGame = useCallback(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
+
+    const theme = THEMES[gameState.theme]
+
+    ctx.fillStyle = theme.bg
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight)
+
+    gameState.currentMap.forEach((row, y) => {
+      row.forEach((tile, x) => {
+        const pixelX = x * TILE_SIZE
+        const pixelY = y * TILE_SIZE
+        // Draw the tile (no highlight overlays here)
+        switch (tile) {
+          case TILES.WALL:
+            ctx.fillStyle = theme.wall
+            ctx.fillRect(pixelX, pixelY, TILE_SIZE, TILE_SIZE)
+            break
+          case TILES.KEY:
+            ctx.fillStyle = "#FFD700"
+            ctx.fillRect(pixelX + 8, pixelY + 8, TILE_SIZE - 16, TILE_SIZE - 16)
+            ctx.fillStyle = "#000"
+            ctx.font = "20px Arial"
+            ctx.textAlign = "center"
+            ctx.fillText("🗝️", pixelX + TILE_SIZE / 2, pixelY + TILE_SIZE / 2 + 7)
+            break
+          case TILES.DOOR:
+            ctx.fillStyle = "#8B4513"
+            ctx.fillRect(pixelX, pixelY, TILE_SIZE, TILE_SIZE)
+            ctx.fillStyle = "#000"
+            ctx.font = "20px Arial"
+            ctx.textAlign = "center"
+            ctx.fillText("🚪", pixelX + TILE_SIZE / 2, pixelY + TILE_SIZE / 2 + 7)
+            break
+          case TILES.GOAL:
+            ctx.fillStyle = "#00FF00"
+            ctx.fillRect(pixelX, pixelY, TILE_SIZE, TILE_SIZE)
+            ctx.fillStyle = "#000"
+            ctx.font = "20px Arial"
+            ctx.textAlign = "center"
+            ctx.fillText("🎯", pixelX + TILE_SIZE / 2, pixelY + TILE_SIZE / 2 + 7)
+            break
+          case TILES.TRAP:
+            ctx.fillStyle = "#FF0000"
+            ctx.fillRect(pixelX + 4, pixelY + 4, TILE_SIZE - 8, TILE_SIZE - 8)
+            ctx.fillStyle = "#000"
+            ctx.font = "16px Arial"
+            ctx.textAlign = "center"
+            ctx.fillText("⚠️", pixelX + TILE_SIZE / 2, pixelY + TILE_SIZE / 2 + 5)
+            break
+          default:
+            ctx.fillStyle = theme.empty
+            ctx.fillRect(pixelX, pixelY, TILE_SIZE, TILE_SIZE)
+            break
+        }
+        ctx.strokeStyle = "#333"
+        ctx.lineWidth = 1
+        ctx.strokeRect(pixelX, pixelY, TILE_SIZE, TILE_SIZE)
+      })
+    })
+    // Draw reachableTiles highlight overlays
+    reachableTiles.forEach(({x, y}) => {
+      const pixelX = x * TILE_SIZE;
+      const pixelY = y * TILE_SIZE;
+      ctx.fillStyle = "rgba(0,255,0,0.3)";
+      ctx.fillRect(pixelX, pixelY, TILE_SIZE, TILE_SIZE);
+    });
+    // Draw hintTile highlight overlay
+    if (hintTile) {
+      const pixelX = hintTile.x * TILE_SIZE;
+      const pixelY = hintTile.y * TILE_SIZE;
+      ctx.fillStyle = "rgba(30,144,255,0.5)"; // DodgerBlue overlay
+      ctx.fillRect(pixelX, pixelY, TILE_SIZE, TILE_SIZE);
+    }
+
+    // Render player
+    const playerPixelX = gameState.playerPos.x * TILE_SIZE
+    const playerPixelY = gameState.playerPos.y * TILE_SIZE
+
+    ctx.fillStyle = "#0066FF"
+    ctx.beginPath()
+    ctx.arc(playerPixelX + TILE_SIZE / 2, playerPixelY + TILE_SIZE / 2, TILE_SIZE / 3, 0, 2 * Math.PI)
+    ctx.fill()
+
+    // Draw the player icon (👤) at the player's current position
+    ctx.fillStyle = "#FFF"
+    ctx.font = "16px Arial"
+    ctx.textAlign = "center"
+    ctx.fillText("👤", playerPixelX + TILE_SIZE / 2, playerPixelY + TILE_SIZE / 2 + 5)
+  }, [gameState, reachableTiles, hintTile, canvasWidth, canvasHeight, TILE_SIZE])
+
+  // Render game loop
+  useEffect(() => {
+    renderGame()
+  }, [renderGame])
+
   return (
-    <div className="flex flex-col items-center">
-      <div className="flex justify-center gap-4 mb-4">
-        <Button size="icon" variant="outline" onClick={restartLevel} aria-label="Retry">
-          <RotateCcw className="w-5 h-5" />
-        </Button>
-        <Button size="icon" variant="outline" onClick={useHint} aria-label="Hint">
-          <Lightbulb className="w-5 h-5" />
-        </Button>
-      </div>
-      <div className="game-box">
-        <div
-          className={clsx(
-            "flex flex-col items-center gap-4 p-4",
-            shake && "animate-shake",
-          )}
-          style={{
-            background: dangerBg ? '#ff0000' : THEMES[gameState.theme].bg,
-            minHeight: '100vh',
-            transition: 'background 0.5s',
-          }}
-        >
-          <div className="text-center">
-            <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-200 mb-2">Puzzle Adventure</h1>
-            <p className="text-gray-600 dark:text-gray-400">Navigate mazes, collect keys, avoid traps!</p>
-          </div>
-
-          {/* Game Stats */}
-          <div className="flex flex-wrap gap-4 justify-center">
-            <Badge variant="secondary" className="flex items-center gap-1">
-              <Trophy className="w-4 h-4" />
-              Level {gameState.level}
-            </Badge>
-            <Badge variant="secondary" className="flex items-center gap-1">
-              <Star className="w-4 h-4" />
-              Score: {score !== null ? score : ''}
-            </Badge>
-            <Badge variant="secondary" className="flex items-center gap-1">
-              <Key className="w-4 h-4" />
-              Keys: {gameState.keysCollected}/{gameState.totalKeys}
-            </Badge>
-            <Badge variant="secondary" className="flex items-center gap-1">
-              <Clock className="w-4 h-4" />
-              Time: {elapsedTime}s
-            </Badge>
-            <Badge variant="secondary" className="flex items-center gap-1">
-              <Move className="w-4 h-4" />
-              Moves: {gameState.moves}
-            </Badge>
-          </div>
-
-          {/* Game Canvas */}
-          <div className={clsx("relative", isRotating && "rotate-animation")}>
-            <canvas
-              ref={canvasRef}
-              width={canvasWidth}
-              height={canvasHeight}
-              className="border-2 border-gray-300 rounded-lg shadow-lg bg-white"
-            />
-          </div>
-
-          {/* Controls Info */}
-          <div className="text-center text-sm text-gray-600 dark:text-gray-400">
-            <p>Use WASD or Arrow Keys to move • H for Hint • R to Restart</p>
-            <p>Collect keys 🗝️ to unlock doors 🚪 • Avoid traps ⚠️ • Reach the goal 🎯</p>
-          </div>
-
-          {/* Player Progress */}
-          <Card className="w-full max-w-md">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg">Player Progress</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div>
-                <div className="flex justify-between text-sm mb-1">
-                  <span>XP</span>
-                  <span>{gameState.xp}</span>
-                </div>
-                <Progress value={gameState.xp % 100} className="h-2" />
-              </div>
-              <div className="flex justify-between text-sm">
-                <span>Coins: {gameState.coins}</span>
-                <span>Retries: {gameState.retries}</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Level Complete Modal */}
-          {showLevelComplete && levelMetrics && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-              <Card className="w-full max-w-md mx-4">
-                <CardHeader className="text-center">
-                  <CardTitle className="text-2xl text-green-600">Level Complete!</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="text-center">
-                    <div className="text-4xl mb-2">🎉</div>
-                    <p className="text-lg font-semibold">Level {gameState.level} Completed!</p>
-                  </div>
-
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span>Time:</span>
-                      <span>{Math.floor(levelMetrics.timeToComplete / 1000)}s</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Moves:</span>
-                      <span>{levelMetrics.movesUsed}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Retries:</span>
-                      <span>{levelMetrics.retriesUsed}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Hints Used:</span>
-                      <span>{levelMetrics.hintsUsed}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <Button onClick={nextLevel} className="flex-1">
-                      Next Level
-                    </Button>
-                    <Button onClick={restartLevel} variant="outline">
-                      Replay
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
+    isLoading ? (
+      <div className="flex flex-col items-center justify-center min-h-screen">
+        <div className="text-center">
+          <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-200 mb-2">Puzzle Adventure</h1>
+          <p className="text-gray-600 dark:text-gray-400">Loading...</p>
         </div>
       </div>
-    </div>
+    ) : (
+      <div className="flex flex-col items-center">
+        <div className="flex justify-center gap-4 mb-4">
+          <Button size="icon" variant="outline" onClick={restartLevel} aria-label="Retry">
+            <RotateCcw className="w-5 h-5" />
+          </Button>
+          <Button size="icon" variant="outline" onClick={useHint} aria-label="Hint">
+            <Lightbulb className="w-5 h-5" />
+          </Button>
+        </div>
+        <div className="game-box">
+          <div
+            className={clsx(
+              "flex flex-col items-center gap-4 p-4",
+              shake && "animate-shake",
+            )}
+            style={{
+              background: dangerBg ? '#ff0000' : THEMES[gameState.theme].bg,
+              minHeight: '100vh',
+              transition: 'background 0.5s',
+            }}
+          >
+            <div className="text-center">
+              <h1 className={clsx("text-3xl font-bold text-gray-800 dark:text-gray-200 mb-2", isMobile && "mobile-text text-2xl")}>Puzzle Adventure</h1>
+              <p className={clsx("text-gray-600 dark:text-gray-400", isMobile && "mobile-text")}>Navigate mazes, collect keys, avoid traps!</p>
+            </div>
+
+            {/* Game Stats */}
+            <div className={clsx("flex flex-wrap gap-4 justify-center", isMobile && "mobile-spacing")}>
+              <Badge variant="secondary" className={clsx("flex items-center gap-1", isMobile && "mobile-badge")}>
+                <Trophy className="w-4 h-4" />
+                Level {gameState.level}
+              </Badge>
+              <Badge variant="secondary" className={clsx("flex items-center gap-1", isMobile && "mobile-badge")}>
+                <Star className="w-4 h-4" />
+                Score: {score !== null ? score : ''}
+              </Badge>
+              <Badge variant="secondary" className={clsx("flex items-center gap-1", isMobile && "mobile-badge")}>
+                <Key className="w-4 h-4" />
+                Keys: {gameState.keysCollected}/{gameState.totalKeys}
+              </Badge>
+              <Badge variant="secondary" className={clsx("flex items-center gap-1", isMobile && "mobile-badge")}>
+                <Clock className="w-4 h-4" />
+                Time: {elapsedTime}s
+              </Badge>
+              <Badge variant="secondary" className={clsx("flex items-center gap-1", isMobile && "mobile-badge")}>
+                <Move className="w-4 h-4" />
+                Moves: {gameState.moves}
+              </Badge>
+            </div>
+
+            {/* Game Canvas */}
+            <div className={clsx("relative", isRotating && "rotate-animation")}>
+              <canvas
+                ref={canvasRef}
+                width={canvasWidth}
+                height={canvasHeight}
+                className="border-2 border-gray-300 rounded-lg shadow-lg bg-white"
+                onTouchStart={isMobile ? handleTouchStartSwipe : handleTouchStart}
+                onTouchEnd={isMobile ? handleTouchEndSwipe : undefined}
+                style={{
+                  maxWidth: '100vw',
+                  maxHeight: '60vh',
+                  touchAction: 'none', // Prevent default touch behaviors
+                }}
+              />
+              
+              {/* Mobile Touch Controls */}
+              {isMobile && (
+                <div className="mt-4 grid grid-cols-3 gap-2 max-w-xs mx-auto">
+                  <div></div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-12 h-12 rounded-full mobile-control-btn touch-active"
+                    onClick={() => movePlayer(0, -1)}
+                  >
+                    ↑
+                  </Button>
+                  <div></div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-12 h-12 rounded-full mobile-control-btn touch-active"
+                    onClick={() => movePlayer(-1, 0)}
+                  >
+                    ←
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-12 h-12 rounded-full mobile-control-btn touch-active"
+                    onClick={() => movePlayer(0, 1)}
+                  >
+                    ↓
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-12 h-12 rounded-full mobile-control-btn touch-active"
+                    onClick={() => movePlayer(1, 0)}
+                  >
+                    →
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Controls Info */}
+            <div className={clsx("text-center text-sm text-gray-600 dark:text-gray-400", isMobile && "mobile-text")}>
+              {isMobile ? (
+                <div>
+                  <p>Tap adjacent tiles or use arrow buttons to move</p>
+                  <p>Swipe on the game area for quick movement</p>
+                  <p>Collect keys 🗝️ to unlock doors 🚪 • Avoid traps ⚠️ • Reach the goal 🎯</p>
+                </div>
+              ) : (
+                <div>
+                  <p>Use WASD or Arrow Keys to move • H for Hint • R to Restart</p>
+                  <p>Collect keys 🗝️ to unlock doors 🚪 • Avoid traps ⚠️ • Reach the goal 🎯</p>
+                </div>
+              )}
+            </div>
+
+            {/* Player Progress */}
+            <Card className={clsx("w-full max-w-md", isMobile && "mobile-card")}>
+              <CardHeader className="pb-2">
+                <CardTitle className={clsx("text-lg", isMobile && "mobile-text")}>Player Progress</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span>XP</span>
+                    <span>{gameState.xp}</span>
+                  </div>
+                  <Progress value={gameState.xp % 100} className="h-2" />
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Coins: {gameState.coins}</span>
+                  <span>Retries: {gameState.retries}</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Level Complete Modal */}
+            {showLevelComplete && levelMetrics && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <Card className="w-full max-w-md mx-4">
+                  <CardHeader className="text-center">
+                    <CardTitle className="text-2xl text-green-600">Level Complete!</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="text-center">
+                      <div className="text-4xl mb-2">🎉</div>
+                      <p className="text-lg font-semibold">Level {gameState.level} Completed!</p>
+                    </div>
+
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span>Time:</span>
+                        <span>{Math.floor(levelMetrics.timeToComplete / 1000)}s</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Moves:</span>
+                        <span>{levelMetrics.movesUsed}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Retries:</span>
+                        <span>{levelMetrics.retriesUsed}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Hints Used:</span>
+                        <span>{levelMetrics.hintsUsed}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button onClick={nextLevel} className="flex-1">
+                        Next Level
+                      </Button>
+                      <Button onClick={restartLevel} variant="outline">
+                        Replay
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
   )
 }
