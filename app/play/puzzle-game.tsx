@@ -630,6 +630,9 @@ export default function PuzzleAdventureGame() {
           newState.currentMap = rotatedMap;
         }
 
+        // Always reset dangerBg after a move
+        setDangerBg(false)
+
         return newState
       })
     },
