@@ -723,10 +723,56 @@ export default function PuzzleAdventureGame() {
         saveUserData({ achievements: newAchievements })
       }
 
+      // Auto-progress difficulty based on performance
+      const currentDifficulty = getDifficulty()
+      const isPerformingWell = metrics.timeToComplete < 20000 && // Under 20 seconds
+                               metrics.movesUsed < 20 && // Under 20 moves
+                               metrics.retriesUsed === 0 && // No retries
+                               metrics.hintsUsed === 0 // No hints
+      
+      const isPerformingPoorly = metrics.timeToComplete > 60000 || // Over 60 seconds
+                                 metrics.movesUsed > 50 || // Over 50 moves
+                                 metrics.retriesUsed > 2 || // More than 2 retries
+                                 metrics.hintsUsed > 1 // More than 1 hint
+      
+      if (isPerformingWell && currentDifficulty === 'easy') {
+        localStorage.setItem('puzzleDifficulty', 'medium')
+        setDifficulty('medium')
+        toast({
+          title: "Difficulty Increased!",
+          description: "Excellent performance! You've been promoted to Medium difficulty!",
+          variant: "default",
+        })
+      } else if (isPerformingWell && currentDifficulty === 'medium') {
+        localStorage.setItem('puzzleDifficulty', 'hard')
+        setDifficulty('hard')
+        toast({
+          title: "Difficulty Increased!",
+          description: "Outstanding performance! You've been promoted to Hard difficulty!",
+          variant: "default",
+        })
+      } else if (isPerformingPoorly && currentDifficulty === 'hard') {
+        localStorage.setItem('puzzleDifficulty', 'medium')
+        setDifficulty('medium')
+        toast({
+          title: "Difficulty Decreased",
+          description: "You've been moved to Medium difficulty for a better experience.",
+          variant: "default",
+        })
+      } else if (isPerformingPoorly && currentDifficulty === 'medium') {
+        localStorage.setItem('puzzleDifficulty', 'easy')
+        setDifficulty('easy')
+        toast({
+          title: "Difficulty Decreased",
+          description: "You've been moved to Easy difficulty for a better experience.",
+          variant: "default",
+        })
+      }
+
       // Clear completion data
       setGameState((prev) => ({ ...prev, completionData: undefined }))
     }
-  }, [gameState.gameStatus, gameState.completionData, gameState.retries])
+  }, [gameState.gameStatus, gameState.completionData, gameState.retries, gameState.level, toast])
 
   const nextLevel = () => {
     setGameState((prev) => ({ ...prev, level: prev.level + 1 }))
